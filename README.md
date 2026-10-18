@@ -103,6 +103,8 @@ adb shell run-as com.z7ui.routinex cat files/rx.log
 
 产物在 `app/build/outputs/apk/debug/app-debug.apk`。
 
+现成的安装包在 [Releases](https://github.com/z7ui/RoutineX/releases) 里。
+
 ## 作者
 
 Deepseek · B站 [@z7ui](https://space.bilibili.com/4841227)
