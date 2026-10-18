@@ -13,5 +13,6 @@ local.properties
 *.aab
 *.jks
 *.keystore
+/keystore/
 tools/
 __pycache__/
