@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">定时快捷</string>
+
+    <string name="about_title">关于</string>
+    <string name="about_subtitle">v%1$s · Deepseek · B站 @z7ui</string>
+    <string name="about_body">到点自动执行某个 App 长按菜单里的快捷方式。用来顶替三星「模式和日常程序」里那个「打开应用程序或执行操作」的能力，小米这边没有。
+
+· 到点时手机锁着，会挂起等你解锁再执行
+· 快捷方式靠 root 读取和执行（部分 App 的跳转入口是 signature 级权限，普通应用进不去）
+· 不申请网络权限，不收集任何信息
+· 运行日志默认关闭，可在设置里打开
+
+作者  Deepseek · B站 @z7ui
+仓库  github.com/z7ui/RoutineX</string>
+    <string name="about_version">版本  %1$s</string>
+    <string name="about_ok">确定</string>
+</resources>
