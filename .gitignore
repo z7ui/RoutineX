@@ -16,3 +16,4 @@ local.properties
 /keystore/
 tools/
 __pycache__/
+HANDOVER.md
