@@ -1,18 +1,23 @@
 package com.z7ui.routinex;
 
 import android.app.AlertDialog;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.ColorInt;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.card.MaterialCardView;
@@ -25,12 +30,19 @@ public class MainActivity extends AppCompatActivity {
 
     private LinearLayout listContainer;
     private TextView emptyTip;
-    private TextView permText;
     private MaterialCardView permCard;
     private MaterialSwitch swLog;
     private TextView tvLogSub;
     private TextView tvLogSize;
     private TextView tvAboutSub;
+    private TextView tvRootState;
+    private TextView tvNotifState;
+    private TextView tvExactState;
+    private TextView tvBatteryState;
+    private TextView tvAutoState;
+
+    /** root 检查会弹 root 管理器的授权框，一个进程只自动查一次。 */
+    private static Boolean rootCached;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,14 +54,17 @@ public class MainActivity extends AppCompatActivity {
 
         listContainer = findViewById(R.id.listContainer);
         emptyTip = findViewById(R.id.emptyTip);
-        permText = findViewById(R.id.permText);
         permCard = findViewById(R.id.permCard);
         swLog = findViewById(R.id.swLog);
         tvLogSub = findViewById(R.id.tvLogSub);
         tvLogSize = findViewById(R.id.tvLogSize);
         tvAboutSub = findViewById(R.id.tvAboutSub);
 
-        setupSettings();
+        tvRootState = findViewById(R.id.tvRootState);
+        tvNotifState = findViewById(R.id.tvNotifState);
+        tvExactState = findViewById(R.id.tvExactState);
+        tvBatteryState = findViewById(R.id.tvBatteryState);
+        tvAutoState = findViewById(R.id.tvAutoState);
 
         FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(v ->
@@ -58,46 +73,165 @@ public class MainActivity extends AppCompatActivity {
         // 每次进来重排一遍，避免系统清理或改时间后闹钟丢失
         Scheduler.scheduleAll(this);
 
-        // 通知权限（Android 13+）：前台服务要靠它显示"等待解锁"的通知
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
-                    != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 10);
-            }
-        }
-
-        findViewById(R.id.btnExact).setOnClickListener(v -> {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
-                        Uri.parse("package:" + getPackageName())));
-            }
-        });
-        findViewById(R.id.btnBattery).setOnClickListener(v -> {
-            Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-            try {
-                startActivity(i);
-            } catch (Exception e) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            }
-        });
-        findViewById(R.id.btnNotif).setOnClickListener(v -> {
-            Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-            i.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
-            try {
-                startActivity(i);
-            } catch (Exception e) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS));
-            }
-        });
+        setupPerms();
+        setupSettings();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         renderList();
-        renderPerm();
+        renderPerms();
         refreshLogSize();
     }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        renderPerms();
+    }
+
+    // ---------------- 权限 ----------------
+
+    private void setupPerms() {
+        findViewById(R.id.rowRoot).setOnClickListener(v -> askRoot());
+        findViewById(R.id.rowNotifPerm).setOnClickListener(v -> openNotif());
+        findViewById(R.id.rowExact).setOnClickListener(v -> openExactAlarm());
+        findViewById(R.id.rowBattery).setOnClickListener(v -> openBattery());
+        findViewById(R.id.rowAutoStart).setOnClickListener(v -> openAutoStart());
+    }
+
+    private void renderPerms() {
+        setPerm(tvNotifState, notifGranted());
+        setPerm(tvExactState, Util.canScheduleExactAlarms(this));
+        setPerm(tvBatteryState, ignoringBattery());
+
+        if (rootCached == null) {
+            if (Util.isLocked(this)) {
+                // 锁屏时 root 管理器弹不出授权框，静默查只会拿到失败结果
+                tvRootState.setText("点击申请");
+                tvRootState.setTextColor(gray());
+                return;
+            }
+            tvRootState.setText("检查中");
+            tvRootState.setTextColor(gray());
+            new Thread(() -> {
+                boolean ok = ShortcutScanner.hasRoot();
+                rootCached = ok;
+                runOnUiThread(() -> setPerm(tvRootState, ok));
+            }).start();
+        } else {
+            setPerm(tvRootState, rootCached);
+        }
+    }
+
+    private void setPerm(TextView v, boolean ok) {
+        v.setText(ok ? "已授权" : "未授权");
+        v.setTextColor(ok ? ContextCompat.getColor(this, R.color.perm_ok)
+                : ContextCompat.getColor(this, R.color.perm_missing));
+    }
+
+    @ColorInt
+    private int gray() {
+        return ContextCompat.getColor(this, R.color.perm_unknown);
+    }
+
+    private boolean notifGranted() {
+        if (Build.VERSION.SDK_INT < 33) return true;
+        return checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean ignoringBattery() {
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    private void askRoot() {
+        if (Boolean.TRUE.equals(rootCached)) {
+            Toast.makeText(this, "已经授权了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (Util.isLocked(this)) {
+            Toast.makeText(this, "root 授权框在锁屏时弹不出来，解锁后再点", Toast.LENGTH_LONG).show();
+            return;
+        }
+        Toast.makeText(this, "正在请求 root，注意看 root 管理器的弹窗", Toast.LENGTH_LONG).show();
+        new Thread(() -> {
+            boolean ok = ShortcutScanner.hasRoot();
+            rootCached = ok;
+            runOnUiThread(() -> {
+                setPerm(tvRootState, ok);
+                Toast.makeText(this, ok ? "root 已授权" : "没有拿到 root", Toast.LENGTH_SHORT).show();
+            });
+        }).start();
+    }
+
+    private void openNotif() {
+        if (notifGranted()) {
+            Toast.makeText(this, "通知已经开着了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 10);
+            return;
+        }
+        Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+        i.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+        startSafely(i);
+    }
+
+    private void openExactAlarm() {
+        if (Util.canScheduleExactAlarms(this)) {
+            Toast.makeText(this, "精确闹钟已经开着了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            startSafely(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    Uri.parse("package:" + getPackageName())));
+        } else {
+            Toast.makeText(this, "这个系统版本不需要单独授权", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void openBattery() {
+        if (ignoringBattery()) {
+            Toast.makeText(this, "已经是无限制了", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent direct = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:" + getPackageName()));
+        if (!startSafely(direct)) {
+            startSafely(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        }
+    }
+
+    private void openAutoStart() {
+        // 小米的自启动管理页没有公开入口，只能硬指过去；指不到就退到应用详情
+        Intent mi = new Intent();
+        mi.setComponent(new ComponentName("com.miui.securitycenter",
+                "com.miui.permcenter.autostart.AutoStartManagementActivity"));
+        if (startSafely(mi)) return;
+
+        Intent oppo = new Intent();
+        oppo.setComponent(new ComponentName("com.coloros.safecenter",
+                "com.coloros.safecenter.permission.startup.StartupAppListActivity"));
+        if (startSafely(oppo)) return;
+
+        startSafely(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName())));
+    }
+
+    private boolean startSafely(Intent i) {
+        try {
+            startActivity(i);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // ---------------- 设置 ----------------
 
     private void setupSettings() {
         boolean on = Prefs.logEnabled(this);
@@ -155,23 +289,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void renderPerm() {
-        boolean exact = Util.canScheduleExactAlarms(this);
-        boolean lazy = android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M
-                || ((android.os.PowerManager) getSystemService(POWER_SERVICE))
-                .isIgnoringBatteryOptimizations(getPackageName());
-
-        if (exact && lazy) {
-            permCard.setVisibility(View.GONE);
-            return;
-        }
-        permCard.setVisibility(View.VISIBLE);
-        StringBuilder sb = new StringBuilder();
-        if (!exact) sb.append("· 精确闹钟：未授权，定时可能延后\n");
-        if (!lazy) sb.append("· 电池优化：未加白名单，后台可能被清掉\n");
-        sb.append("· 小米还需要在「应用设置 → 自启动」里允许本应用");
-        permText.setText(sb.toString().trim());
-    }
+    // ---------------- 列表 ----------------
 
     private void renderList() {
         listContainer.removeAllViews();

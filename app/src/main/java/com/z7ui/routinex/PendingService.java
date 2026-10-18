@@ -28,11 +28,14 @@ public class PendingService extends Service {
     private static final String EXTRA_RID = "rid";
     private static final long TIMEOUT_MS = 8L * 3600L * 1000L;   // 8 小时没解锁就放弃
     private static final long POLL_MS = 500L;
+    /** 检测到解锁后再等一会儿，让系统把解锁动画和窗口切换走完。 */
+    private static final long UNLOCK_SETTLE_MS = 400L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private BroadcastReceiver unlockRx;
     private String rid;
     private boolean done;
+    private boolean settling;
 
     public static void start(Context c, String rid) {
         Intent i = new Intent(c, PendingService.class);
@@ -70,7 +73,7 @@ public class PendingService extends Service {
                 @Override
                 public void onReceive(Context context, Intent intent) {
                     Logx.i(PendingService.this, "收到解锁广播");
-                    runNow("broadcast");
+                    scheduleRun("broadcast");
                 }
             };
             ContextCompat.registerReceiver(this, unlockRx,
@@ -93,12 +96,21 @@ public class PendingService extends Service {
             if (done) return;
             if (!Util.isLocked(PendingService.this)) {
                 Logx.i(PendingService.this, "轮询发现已解锁");
-                runNow("poll");
+                scheduleRun("poll");
                 return;
             }
             handler.postDelayed(this, POLL_MS);
         }
     };
+
+    /** 解锁后等一小会儿再执行，避免刚解锁就抢前台。 */
+    private void scheduleRun(String from) {
+        if (done || settling) return;
+        settling = true;
+        handler.removeCallbacks(poll);
+        Logx.i(this, "解锁确认，等 " + UNLOCK_SETTLE_MS + "ms 后执行（来自 " + from + "）");
+        handler.postDelayed(() -> runNow(from), UNLOCK_SETTLE_MS);
+    }
 
     private void runNow(String from) {
         if (done) return;
