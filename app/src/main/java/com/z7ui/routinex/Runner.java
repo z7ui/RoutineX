@@ -41,14 +41,18 @@ public class Runner {
             } else {
                 note = v == OK ? "界面确认已签到" : "已拉起，界面无法校验";
             }
-            result = v == FAIL ? FAIL : OK;
+            // 这里以前写的是 `v == FAIL ? FAIL : OK`——把「判断不了」也记成了成功，
+            // 于是又出现「历史里写成功、实际不知道」的假象，和上一版的问题同构。
+            // 现在原样保留三态：看得到勾才叫成功。
+            result = v;
         } else {
             result = OK;
             note = "已打开应用";
         }
 
         r.lastRunAt = now;
-        r.lastResult = result == FAIL ? 2 : 1;
+        // 0 表示未确认：界面上要能和「成功」「失败」区分开
+        r.lastResult = result == OK ? 1 : result == FAIL ? 2 : 0;
         RoutineStore.upsert(c, r);
         History.add(c, r, source, now, result, note);
         Logx.i(c, "执行结果=" + label(result) + "（" + note + "，来源 " + source + "）");

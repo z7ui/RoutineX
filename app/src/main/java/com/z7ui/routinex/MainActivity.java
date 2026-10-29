@@ -84,6 +84,9 @@ public class MainActivity extends AppCompatActivity {
         renderList();
         renderPerms();
         refreshLogSize();
+        // 从编辑页点完「测试执行一次」回来时，历史已经多了一条，
+        // 但 Activity 没有重建——只在 onCreate 里刷会一直显示旧值。
+        refreshHistorySub();
     }
 
     @Override
@@ -291,9 +294,11 @@ public class MainActivity extends AppCompatActivity {
     private void refreshHistorySub() {
         if (tvHistorySub == null) return;
         List<String> lines = History.recentLines(this, 1);
+        // 历史条目是「首行 + 缩进的备注行」，压成一行时要把缩进一起去掉，
+        // 否则会显示成「每日签到 ·     界面确认已签到」这种中间一坨空格。
         tvHistorySub.setText(lines.isEmpty()
                 ? "还没有记录，执行一次后会出现"
-                : "最近一次：" + lines.get(0).replace("\n", " · "));
+                : "最近一次：" + lines.get(0).replaceAll("\\s*\\n\\s*", " · "));
     }
 
     private void showHistory() {
