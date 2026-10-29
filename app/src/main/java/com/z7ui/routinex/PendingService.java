@@ -119,12 +119,9 @@ public class PendingService extends Service {
         Routine r = RoutineStore.find(this, rid);
         if (r != null) {
             Logx.i(this, "执行（来自 " + from + "）:" + r.title);
-            boolean ok = Launcher.run(this, r);
-            Logx.i(this, "执行结果=" + ok);
-            r.lastRunAt = System.currentTimeMillis();
-            r.lastResult = ok ? 1 : 2;
-            RoutineStore.upsert(this, r);
-            Notifier.toast(this, ok ? "解锁后已执行：" + r.title : "执行失败：" + r.title);
+            int result = Runner.execute(this, r, "解锁");
+            Notifier.toast(this, result == Runner.FAIL
+                    ? "执行失败：" + r.title : "解锁后已执行：" + r.title);
         }
         stopSelf();
     }

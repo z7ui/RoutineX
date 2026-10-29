@@ -34,6 +34,7 @@ public class MainActivity extends AppCompatActivity {
     private MaterialSwitch swLog;
     private TextView tvLogSub;
     private TextView tvLogSize;
+    private TextView tvHistorySub;
     private TextView tvAboutSub;
     private TextView tvRootState;
     private TextView tvNotifState;
@@ -243,6 +244,22 @@ public class MainActivity extends AppCompatActivity {
             refreshLogSize();
         });
         findViewById(R.id.rowLog).setOnClickListener(v -> swLog.toggle());
+        tvHistorySub = findViewById(R.id.tvHistorySub);
+        findViewById(R.id.rowHistory).setOnClickListener(v -> showHistory());
+        findViewById(R.id.rowHistory).setOnLongClickListener(v -> {
+            new AlertDialog.Builder(this)
+                    .setTitle("清空执行历史？")
+                    .setMessage("只删历史记录，不影响任务和日志。")
+                    .setPositiveButton("清空", (d, w) -> {
+                        History.clear(this);
+                        refreshHistorySub();
+                        Toast.makeText(this, "已清空", Toast.LENGTH_SHORT).show();
+                    })
+                    .setNegativeButton("取消", null)
+                    .show();
+            return true;
+        });
+        refreshHistorySub();
         findViewById(R.id.rowClearLog).setOnClickListener(v -> clearLog());
         findViewById(R.id.rowAbout).setOnClickListener(v -> showAbout());
         tvAboutSub.setText(getString(R.string.about_subtitle, versionName()));
@@ -269,6 +286,39 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    private void refreshHistorySub() {
+        if (tvHistorySub == null) return;
+        List<String> lines = History.recentLines(this, 1);
+        tvHistorySub.setText(lines.isEmpty()
+                ? "还没有记录，执行一次后会出现"
+                : "最近一次：" + lines.get(0).replace("\n", " · "));
+    }
+
+    private void showHistory() {
+        List<String> lines = History.recentLines(this, 30);
+        TextView tv = new TextView(this);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad, pad, pad);
+        tv.setTextSize(13f);
+        tv.setLineSpacing(0f, 1.25f);
+        tv.setText(lines.isEmpty() ? "还没有记录。\n\n执行一次任务后，这里会有「时间 / 结果 / 来源 / 备注」。" : String.join("\n\n", lines));
+
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
+
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle("执行历史（最近 30 条）")
+                .setView(sv)
+                .setPositiveButton("关闭", null);
+        if (!lines.isEmpty()) {
+            b.setNeutralButton("清空", (d, w) -> {
+                History.clear(this);
+                refreshHistorySub();
+            });
+        }
+        b.show();
     }
 
     private void showAbout() {

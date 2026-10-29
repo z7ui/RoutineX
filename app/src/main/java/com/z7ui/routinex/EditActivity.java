@@ -156,8 +156,14 @@ public class EditActivity extends AppCompatActivity {
             Toast.makeText(this, "先选目标应用", Toast.LENGTH_SHORT).show();
             return;
         }
-        boolean ok = Launcher.run(this, r);
-        Toast.makeText(this, ok ? "已触发，看下 App 有没有反应" : "触发失败，检查快捷方式", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "已触发，正在校验结果…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            int result = Runner.execute(getApplicationContext(), r, "测试");
+            runOnUiThread(() -> Toast.makeText(this,
+                    result == Runner.OK ? "执行成功（" + (r.lastResult == 1 ? "已记账" : "") + "）"
+                            : result == Runner.FAIL ? "执行失败，看下界面" : "已执行，但判断不了结果",
+                    Toast.LENGTH_SHORT).show());
+        }).start();
     }
 
     private void save() {

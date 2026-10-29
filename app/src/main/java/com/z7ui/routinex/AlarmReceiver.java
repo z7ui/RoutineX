@@ -25,12 +25,9 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (locked && r.deferUntilUnlock) {
             PendingService.start(context, r.id);
         } else {
-            boolean ok = Launcher.run(context, r);
-            Logx.i(context, "立即执行结果=" + ok);
-            r.lastRunAt = System.currentTimeMillis();
-            r.lastResult = ok ? 1 : 2;
-            RoutineStore.upsert(context, r);
-            Notifier.toast(context, ok ? "已执行：" + r.title : "执行失败：" + r.title);
+            int result = Runner.execute(context, r, "闹钟");
+            Notifier.toast(context, result == Runner.FAIL
+                    ? "执行失败：" + r.title : "已执行：" + r.title);
         }
     }
 }
