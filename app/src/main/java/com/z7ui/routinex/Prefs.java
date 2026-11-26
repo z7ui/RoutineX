@@ -28,4 +28,9 @@ public class Prefs {
         cachedLog = on;
         sp(c).edit().putBoolean(KEY_LOG, on).apply();
     }
+
+    /** 导入备份后调用：清掉内存缓存，否则界面还显示旧值 */
+    public static void invalidate() {
+        cachedLog = null;
+    }
 }
